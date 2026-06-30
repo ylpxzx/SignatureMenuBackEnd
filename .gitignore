@@ -1,0 +1,11 @@
+# Local environment
+.env
+
+# Runtime data
+data/
+*.log
+
+# Go build/cache output used by local dev commands
+.gocache/
+.gotmp/
+*.exe
