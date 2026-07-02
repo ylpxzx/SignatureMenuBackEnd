@@ -122,6 +122,44 @@ func (s *Store) FindUserByUsername(username string) (User, error) {
 	return User{}, ErrNotFound
 }
 
+func (s *Store) UpdateUserProfile(id string, username string, displayName string) (User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	username = normalizeUsername(username)
+	displayName = strings.TrimSpace(displayName)
+	if id == "" || username == "" {
+		return User{}, ErrInvalidInput
+	}
+	if displayName == "" {
+		displayName = username
+	}
+
+	targetIndex := -1
+	for index, user := range s.data.Users {
+		if user.ID == id {
+			targetIndex = index
+			continue
+		}
+		if user.Username == username {
+			return User{}, ErrConflict
+		}
+	}
+	if targetIndex < 0 {
+		return User{}, ErrNotFound
+	}
+
+	user := s.data.Users[targetIndex]
+	user.Username = username
+	user.DisplayName = displayName
+	user.UpdatedAt = time.Now().UTC()
+	s.data.Users[targetIndex] = user
+	if err := s.saveLocked(); err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
+
 func (s *Store) ListRecipes(userID string) []Recipe {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -306,6 +344,7 @@ func (s *Store) CreateMenu(userID string, input MenuMutation) (MenuRecord, error
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
+	s.applyMenuCookedCountTransitionLocked(userID, nil, &menu, now)
 	s.data.Menus = append(s.data.Menus, menu)
 	if err := s.saveLocked(); err != nil {
 		return MenuRecord{}, err
@@ -327,6 +366,8 @@ func (s *Store) UpdateMenu(userID string, id string, input MenuMutation) (MenuRe
 			continue
 		}
 
+		before := menu
+		now := time.Now().UTC()
 		menu.Title = input.Title
 		menu.Note = input.Note
 		menu.DateKey = input.DateKey
@@ -338,8 +379,9 @@ func (s *Store) UpdateMenu(userID string, id string, input MenuMutation) (MenuRe
 		menu.RecipeIDs = input.RecipeIDs
 		menu.Dishes = buildMenuDishes(input.Dishes)
 		menu.Tone = menuTone(input.Status)
-		menu.UpdatedAt = time.Now().UTC()
+		menu.UpdatedAt = now
 
+		s.applyMenuCookedCountTransitionLocked(userID, &before, &menu, now)
 		s.data.Menus[index] = menu
 		if err := s.saveLocked(); err != nil {
 			return MenuRecord{}, err
@@ -360,9 +402,12 @@ func (s *Store) UpdateMenuStatus(userID string, id string, status string) (MenuR
 			continue
 		}
 
+		before := menu
+		now := time.Now().UTC()
 		menu.Status = status
 		menu.Tone = menuTone(status)
-		menu.UpdatedAt = time.Now().UTC()
+		menu.UpdatedAt = now
+		s.applyMenuCookedCountTransitionLocked(userID, &before, &menu, now)
 		s.data.Menus[index] = menu
 		if err := s.saveLocked(); err != nil {
 			return MenuRecord{}, err
@@ -382,9 +427,11 @@ func (s *Store) DeleteMenu(userID string, id string) error {
 			continue
 		}
 
+		before := menu
 		now := time.Now().UTC()
 		menu.DeletedAt = &now
 		menu.UpdatedAt = now
+		s.applyMenuCookedCountTransitionLocked(userID, &before, nil, now)
 		s.data.Menus[index] = menu
 		return s.saveLocked()
 	}
@@ -490,6 +537,67 @@ func (s *Store) normalizeMenuMutationLocked(userID string, input MenuMutation) M
 	input.Dishes = dishes
 	input.RecipeIDs = normalizeStringList(input.RecipeIDs, 99)
 	return input
+}
+
+func (s *Store) applyMenuCookedCountTransitionLocked(userID string, before *MenuRecord, after *MenuRecord, now time.Time) {
+	deltas := map[string]int{}
+	if before != nil && normalizeMenuStatus(before.Status) == "served" {
+		for _, recipeID := range menuRecipeIDs(*before) {
+			deltas[recipeID]--
+		}
+	}
+	if after != nil && normalizeMenuStatus(after.Status) == "served" {
+		for _, recipeID := range menuRecipeIDs(*after) {
+			deltas[recipeID]++
+		}
+	}
+
+	for recipeID, delta := range deltas {
+		if delta == 0 {
+			continue
+		}
+		s.adjustRecipeCookedCountLocked(userID, recipeID, delta, now)
+	}
+}
+
+func (s *Store) adjustRecipeCookedCountLocked(userID string, recipeID string, delta int, now time.Time) {
+	recipeID = strings.TrimSpace(recipeID)
+	if recipeID == "" {
+		return
+	}
+
+	for index, recipe := range s.data.Recipes {
+		if recipe.ID != recipeID || recipe.UserID != userID || recipe.DeletedAt != nil {
+			continue
+		}
+
+		recipe.CookedCount = clamp(recipe.CookedCount+delta, 0, 9999)
+		recipe.UpdatedAt = now
+		s.data.Recipes[index] = recipe
+		return
+	}
+}
+
+func menuRecipeIDs(menu MenuRecord) []string {
+	seen := map[string]bool{}
+	recipeIDs := make([]string, 0, len(menu.Dishes)+len(menu.RecipeIDs))
+
+	appendID := func(recipeID string) {
+		recipeID = strings.TrimSpace(recipeID)
+		if recipeID == "" || seen[recipeID] {
+			return
+		}
+		seen[recipeID] = true
+		recipeIDs = append(recipeIDs, recipeID)
+	}
+
+	for _, dish := range menu.Dishes {
+		appendID(dish.RecipeID)
+	}
+	for _, recipeID := range menu.RecipeIDs {
+		appendID(recipeID)
+	}
+	return recipeIDs
 }
 
 func (s *Store) saveLocked() error {

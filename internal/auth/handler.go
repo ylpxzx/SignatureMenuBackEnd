@@ -28,6 +28,7 @@ func (h *Handler) RegisterRoutes(api *gin.RouterGroup, protected *gin.RouterGrou
 	api.POST("/auth/login", h.login)
 	protected.POST("/auth/logout", h.logout)
 	protected.GET("/me", h.me)
+	protected.PATCH("/me", h.updateMe)
 }
 
 func (h *Handler) register(c *gin.Context) {
@@ -89,6 +90,34 @@ func (h *Handler) me(c *gin.Context) {
 	httpx.OK(c, toUserResponse(user))
 }
 
+func (h *Handler) updateMe(c *gin.Context) {
+	var req profileUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Error(c, http.StatusBadRequest, "bad_request", "请求格式不正确")
+		return
+	}
+	if message := validateProfileUpdate(req); message != "" {
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", message)
+		return
+	}
+
+	user, err := h.store.UpdateUserProfile(middleware.UserID(c), req.Username, req.DisplayName)
+	if err != nil {
+		if errors.Is(err, store.ErrConflict) {
+			httpx.Error(c, http.StatusConflict, "username_taken", "这个用户名已经被使用")
+			return
+		}
+		if errors.Is(err, store.ErrNotFound) {
+			httpx.Error(c, http.StatusUnauthorized, "unauthorized", "请重新登录")
+			return
+		}
+		httpx.Error(c, http.StatusInternalServerError, "update_user_failed", "保存资料失败")
+		return
+	}
+
+	httpx.OK(c, toUserResponse(user))
+}
+
 func (h *Handler) respondWithToken(c *gin.Context, status int, user store.User) {
 	rawToken, err := h.tokens.Generate(user.ID)
 	if err != nil {
@@ -105,6 +134,21 @@ func validateCredentials(req credentialsRequest) string {
 	}
 	if len(req.Password) < 6 {
 		return "密码至少需要 6 个字符"
+	}
+	return ""
+}
+
+func validateProfileUpdate(req profileUpdateRequest) string {
+	username := strings.TrimSpace(req.Username)
+	displayName := strings.TrimSpace(req.DisplayName)
+	if len(username) < 3 {
+		return "用户名至少需要 3 个字符"
+	}
+	if len(username) > 32 {
+		return "用户名最多 32 个字符"
+	}
+	if displayName != "" && len([]rune(displayName)) > 24 {
+		return "昵称最多 24 个字"
 	}
 	return ""
 }

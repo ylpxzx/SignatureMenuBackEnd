@@ -8,6 +8,11 @@ type credentialsRequest struct {
 	DisplayName string `json:"display_name"`
 }
 
+type profileUpdateRequest struct {
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+}
+
 type userResponse struct {
 	ID          string    `json:"id"`
 	Username    string    `json:"username"`
