@@ -53,6 +53,31 @@ type RecipeStep struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
+type MenuRecord struct {
+	ID         string     `json:"id"`
+	UserID     string     `json:"user_id"`
+	Title      string     `json:"title"`
+	Note       string     `json:"note"`
+	DateKey    string     `json:"date_key"`
+	DateLabel  string     `json:"date_label"`
+	Weekday    string     `json:"weekday"`
+	Time       string     `json:"time"`
+	Status     string     `json:"status"`
+	DinerCount int        `json:"diner_count"`
+	RecipeIDs  []string   `json:"recipe_ids"`
+	Dishes     []MenuDish `json:"dishes"`
+	Tone       string     `json:"tone"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	DeletedAt  *time.Time `json:"deleted_at,omitempty"`
+}
+
+type MenuDish struct {
+	RecipeID string `json:"recipe_id"`
+	Name     string `json:"name"`
+	Count    int    `json:"count"`
+}
+
 type RecipeMutation struct {
 	Name             string
 	Description      string
@@ -68,6 +93,23 @@ type RecipeMutation struct {
 	PrivateNote      string
 	Ingredients      []IngredientMutation
 	Steps            []StepMutation
+}
+
+type MenuMutation struct {
+	Title      string
+	Note       string
+	DateKey    string
+	Time       string
+	Status     string
+	DinerCount int
+	RecipeIDs  []string
+	Dishes     []MenuDishMutation
+}
+
+type MenuDishMutation struct {
+	RecipeID string
+	Name     string
+	Count    int
 }
 
 type IngredientMutation struct {

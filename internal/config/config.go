@@ -27,7 +27,7 @@ func Load() Config {
 		JWTSecret: getEnv("JWT_SECRET", "signature-menu-local-secret"),
 		TokenTTL:  7 * 24 * time.Hour,
 		AllowedOrigins: splitCSV(getEnv("CORS_ORIGINS",
-			"http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173,http://192.168.31.215:5173")),
+			"http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173,http://192.168.31.215:5173,http://192.168.30.118:5173")),
 	}
 }
 

@@ -19,8 +19,9 @@ type Store struct {
 }
 
 type appData struct {
-	Users   []User   `json:"users"`
-	Recipes []Recipe `json:"recipes"`
+	Users   []User       `json:"users"`
+	Recipes []Recipe     `json:"recipes"`
+	Menus   []MenuRecord `json:"menus"`
 }
 
 func New(path string) (*Store, error) {
@@ -29,6 +30,7 @@ func New(path string) (*Store, error) {
 		data: appData{
 			Users:   []User{},
 			Recipes: []Recipe{},
+			Menus:   []MenuRecord{},
 		},
 	}
 
@@ -53,6 +55,9 @@ func New(path string) (*Store, error) {
 	}
 	if store.data.Recipes == nil {
 		store.data.Recipes = []Recipe{}
+	}
+	if store.data.Menus == nil {
+		store.data.Menus = []MenuRecord{}
 	}
 
 	return store, nil
@@ -242,6 +247,150 @@ func (s *Store) DeleteRecipe(userID string, id string) error {
 	return ErrNotFound
 }
 
+func (s *Store) ListMenus(userID string) []MenuRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	menus := make([]MenuRecord, 0)
+	for _, menu := range s.data.Menus {
+		if menu.UserID == userID && menu.DeletedAt == nil {
+			menus = append(menus, menu)
+		}
+	}
+
+	sort.SliceStable(menus, func(i, j int) bool {
+		if menus[i].DateKey == menus[j].DateKey {
+			return menus[i].UpdatedAt.After(menus[j].UpdatedAt)
+		}
+		return menus[i].DateKey > menus[j].DateKey
+	})
+	return menus
+}
+
+func (s *Store) GetMenu(userID string, id string) (MenuRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, menu := range s.data.Menus {
+		if menu.ID == id && menu.UserID == userID && menu.DeletedAt == nil {
+			return menu, nil
+		}
+	}
+	return MenuRecord{}, ErrNotFound
+}
+
+func (s *Store) CreateMenu(userID string, input MenuMutation) (MenuRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	input = s.normalizeMenuMutationLocked(userID, input)
+	if !isMenuMutationComplete(input) {
+		return MenuRecord{}, ErrInvalidInput
+	}
+
+	now := time.Now().UTC()
+	menu := MenuRecord{
+		ID:         newID(),
+		UserID:     userID,
+		Title:      input.Title,
+		Note:       input.Note,
+		DateKey:    input.DateKey,
+		DateLabel:  menuDateLabel(input.DateKey),
+		Weekday:    menuWeekday(input.DateKey),
+		Time:       input.Time,
+		Status:     input.Status,
+		DinerCount: input.DinerCount,
+		RecipeIDs:  input.RecipeIDs,
+		Dishes:     buildMenuDishes(input.Dishes),
+		Tone:       menuTone(input.Status),
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+	s.data.Menus = append(s.data.Menus, menu)
+	if err := s.saveLocked(); err != nil {
+		return MenuRecord{}, err
+	}
+	return menu, nil
+}
+
+func (s *Store) UpdateMenu(userID string, id string, input MenuMutation) (MenuRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	input = s.normalizeMenuMutationLocked(userID, input)
+	if !isMenuMutationComplete(input) {
+		return MenuRecord{}, ErrInvalidInput
+	}
+
+	for index, menu := range s.data.Menus {
+		if menu.ID != id || menu.UserID != userID || menu.DeletedAt != nil {
+			continue
+		}
+
+		menu.Title = input.Title
+		menu.Note = input.Note
+		menu.DateKey = input.DateKey
+		menu.DateLabel = menuDateLabel(input.DateKey)
+		menu.Weekday = menuWeekday(input.DateKey)
+		menu.Time = input.Time
+		menu.Status = input.Status
+		menu.DinerCount = input.DinerCount
+		menu.RecipeIDs = input.RecipeIDs
+		menu.Dishes = buildMenuDishes(input.Dishes)
+		menu.Tone = menuTone(input.Status)
+		menu.UpdatedAt = time.Now().UTC()
+
+		s.data.Menus[index] = menu
+		if err := s.saveLocked(); err != nil {
+			return MenuRecord{}, err
+		}
+		return menu, nil
+	}
+
+	return MenuRecord{}, ErrNotFound
+}
+
+func (s *Store) UpdateMenuStatus(userID string, id string, status string) (MenuRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	status = normalizeMenuStatus(status)
+	for index, menu := range s.data.Menus {
+		if menu.ID != id || menu.UserID != userID || menu.DeletedAt != nil {
+			continue
+		}
+
+		menu.Status = status
+		menu.Tone = menuTone(status)
+		menu.UpdatedAt = time.Now().UTC()
+		s.data.Menus[index] = menu
+		if err := s.saveLocked(); err != nil {
+			return MenuRecord{}, err
+		}
+		return menu, nil
+	}
+
+	return MenuRecord{}, ErrNotFound
+}
+
+func (s *Store) DeleteMenu(userID string, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for index, menu := range s.data.Menus {
+		if menu.ID != id || menu.UserID != userID || menu.DeletedAt != nil {
+			continue
+		}
+
+		now := time.Now().UTC()
+		menu.DeletedAt = &now
+		menu.UpdatedAt = now
+		s.data.Menus[index] = menu
+		return s.saveLocked()
+	}
+	return ErrNotFound
+}
+
 func (s *Store) IngredientSummaries(userID string) []IngredientSummary {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -275,6 +424,72 @@ func (s *Store) IngredientSummaries(userID string) []IngredientSummary {
 		return items[i].RecipeCount > items[j].RecipeCount
 	})
 	return items
+}
+
+func (s *Store) normalizeMenuMutationLocked(userID string, input MenuMutation) MenuMutation {
+	input.Title = strings.TrimSpace(input.Title)
+	input.Note = strings.TrimSpace(input.Note)
+	input.DateKey = strings.TrimSpace(input.DateKey)
+	input.Time = strings.TrimSpace(input.Time)
+	input.Status = normalizeMenuStatus(input.Status)
+	input.DinerCount = clamp(input.DinerCount, 1, 99)
+	input.RecipeIDs = normalizeStringList(input.RecipeIDs, 99)
+
+	recipeNames := map[string]string{}
+	for _, recipe := range s.data.Recipes {
+		if recipe.UserID == userID && recipe.DeletedAt == nil {
+			recipeNames[recipe.ID] = recipe.Name
+		}
+	}
+
+	dishes := make([]MenuDishMutation, 0, len(input.Dishes)+len(input.RecipeIDs))
+	seen := map[string]bool{}
+	for _, dish := range input.Dishes {
+		recipeID := strings.TrimSpace(dish.RecipeID)
+		name := strings.TrimSpace(dish.Name)
+		if recipeID != "" {
+			recipeName, ok := recipeNames[recipeID]
+			if !ok {
+				continue
+			}
+			if name == "" {
+				name = recipeName
+			}
+			if name == "" {
+				continue
+			}
+			if !seen[recipeID] {
+				input.RecipeIDs = appendRecipeID(input.RecipeIDs, recipeID)
+				seen[recipeID] = true
+			}
+		}
+		if name == "" {
+			continue
+		}
+		dishes = append(dishes, MenuDishMutation{
+			RecipeID: recipeID,
+			Name:     name,
+			Count:    clamp(dish.Count, 1, 99),
+		})
+	}
+	for _, recipeID := range input.RecipeIDs {
+		if seen[recipeID] {
+			continue
+		}
+		name := recipeNames[recipeID]
+		if name == "" {
+			continue
+		}
+		seen[recipeID] = true
+		dishes = append(dishes, MenuDishMutation{
+			RecipeID: recipeID,
+			Name:     name,
+			Count:    1,
+		})
+	}
+	input.Dishes = dishes
+	input.RecipeIDs = normalizeStringList(input.RecipeIDs, 99)
+	return input
 }
 
 func (s *Store) saveLocked() error {
@@ -431,6 +646,83 @@ func buildSteps(input []StepMutation, existing []RecipeStep, now time.Time) []Re
 		steps[index].StepOrder = index + 1
 	}
 	return steps
+}
+
+func buildMenuDishes(input []MenuDishMutation) []MenuDish {
+	dishes := make([]MenuDish, 0, len(input))
+	for _, item := range input {
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			continue
+		}
+		dishes = append(dishes, MenuDish{
+			RecipeID: strings.TrimSpace(item.RecipeID),
+			Name:     name,
+			Count:    clamp(item.Count, 1, 99),
+		})
+	}
+	return dishes
+}
+
+func isMenuMutationComplete(input MenuMutation) bool {
+	return input.Title != "" && isDateKey(input.DateKey) && isTimeValue(input.Time)
+}
+
+func normalizeMenuStatus(status string) string {
+	if strings.TrimSpace(status) == "served" {
+		return "served"
+	}
+	return "pending"
+}
+
+func menuTone(status string) string {
+	if normalizeMenuStatus(status) == "served" {
+		return "fresh"
+	}
+	return "warm"
+}
+
+func menuDateLabel(dateKey string) string {
+	date, err := time.ParseInLocation("2006-01-02", dateKey, time.Local)
+	if err != nil {
+		return ""
+	}
+	return date.Format("1月2日")
+}
+
+func menuWeekday(dateKey string) string {
+	date, err := time.ParseInLocation("2006-01-02", dateKey, time.Local)
+	if err != nil {
+		return ""
+	}
+	weekdays := []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
+	return weekdays[int(date.Weekday())]
+}
+
+func isDateKey(value string) bool {
+	_, err := time.ParseInLocation("2006-01-02", value, time.Local)
+	return err == nil
+}
+
+func isTimeValue(value string) bool {
+	if len(value) != 5 || value[2] != ':' {
+		return false
+	}
+	_, err := time.Parse("15:04", value)
+	return err == nil
+}
+
+func appendRecipeID(recipeIDs []string, recipeID string) []string {
+	recipeID = strings.TrimSpace(recipeID)
+	if recipeID == "" {
+		return recipeIDs
+	}
+	for _, item := range recipeIDs {
+		if item == recipeID {
+			return recipeIDs
+		}
+	}
+	return append(recipeIDs, recipeID)
 }
 
 func clamp(value int, min int, max int) int {

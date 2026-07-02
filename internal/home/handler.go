@@ -66,17 +66,17 @@ func (h *Handler) summary(c *gin.Context) {
 		stats.TotalRecipeSteps += len(item.Steps)
 	}
 
-	featured := append([]store.Recipe(nil), recipes...)
-	sort.SliceStable(featured, func(i, j int) bool {
-		if featured[i].Difficulty == featured[j].Difficulty {
-			return featured[i].UpdatedAt.After(featured[j].UpdatedAt)
+	mostCooked := append([]store.Recipe(nil), recipes...)
+	sort.SliceStable(mostCooked, func(i, j int) bool {
+		if mostCooked[i].CookedCount == mostCooked[j].CookedCount {
+			return mostCooked[i].UpdatedAt.After(mostCooked[j].UpdatedAt)
 		}
-		return featured[i].Difficulty > featured[j].Difficulty
+		return mostCooked[i].CookedCount > mostCooked[j].CookedCount
 	})
 
 	httpx.OK(c, summaryResponse{
 		Stats:           stats,
-		FeaturedRecipes: summarizeRecipes(featured, 4),
+		FeaturedRecipes: summarizeRecipes(mostCooked, 5),
 		RecentRecipes:   summarizeRecipes(recipes, 5),
 		Ingredients:     limitIngredients(ingredients, 8),
 	})

@@ -6,6 +6,7 @@ import (
 	"signature-menu-backend/internal/auth"
 	"signature-menu-backend/internal/config"
 	"signature-menu-backend/internal/home"
+	"signature-menu-backend/internal/menu"
 	"signature-menu-backend/internal/middleware"
 	"signature-menu-backend/internal/recipe"
 	"signature-menu-backend/internal/store"
@@ -32,6 +33,7 @@ func NewRouter(cfg config.Config, dataStore *store.Store, tokens *token.Manager)
 
 	auth.NewHandler(dataStore, tokens).RegisterRoutes(api, protected)
 	recipe.NewHandler(dataStore).RegisterRoutes(protected)
+	menu.NewHandler(dataStore).RegisterRoutes(protected)
 	home.NewHandler(dataStore).RegisterRoutes(protected)
 
 	return router
