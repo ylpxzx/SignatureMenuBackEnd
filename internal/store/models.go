@@ -16,10 +16,16 @@ type Recipe struct {
 	UserID           string       `json:"user_id"`
 	Name             string       `json:"name"`
 	Description      string       `json:"description"`
+	CookingMethod    string       `json:"cooking_method"`
 	ServingCount     int          `json:"serving_count"`
 	EstimatedMinutes int          `json:"estimated_minutes"`
 	Difficulty       int          `json:"difficulty"`
 	IsAvailable      bool         `json:"is_available"`
+	TasteTags        []string     `json:"taste_tags"`
+	Proficiency      int          `json:"proficiency"`
+	PriceRange       string       `json:"price_range"`
+	CookedCount      int          `json:"cooked_count"`
+	PrivateNote      string       `json:"private_note"`
 	Ingredients      []Ingredient `json:"ingredients"`
 	Steps            []RecipeStep `json:"steps"`
 	CreatedAt        time.Time    `json:"created_at"`
@@ -50,10 +56,16 @@ type RecipeStep struct {
 type RecipeMutation struct {
 	Name             string
 	Description      string
+	CookingMethod    string
 	ServingCount     int
 	EstimatedMinutes int
 	Difficulty       int
 	IsAvailable      bool
+	TasteTags        []string
+	Proficiency      int
+	PriceRange       string
+	CookedCount      int
+	PrivateNote      string
 	Ingredients      []IngredientMutation
 	Steps            []StepMutation
 }

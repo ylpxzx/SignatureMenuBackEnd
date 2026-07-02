@@ -151,7 +151,7 @@ func (s *Store) CreateRecipe(userID string, input RecipeMutation) (Recipe, error
 	defer s.mu.Unlock()
 
 	input = normalizeRecipeMutation(input)
-	if input.Name == "" {
+	if !isRecipeMutationComplete(input) {
 		return Recipe{}, ErrInvalidInput
 	}
 
@@ -161,10 +161,16 @@ func (s *Store) CreateRecipe(userID string, input RecipeMutation) (Recipe, error
 		UserID:           userID,
 		Name:             input.Name,
 		Description:      input.Description,
+		CookingMethod:    input.CookingMethod,
 		ServingCount:     input.ServingCount,
 		EstimatedMinutes: input.EstimatedMinutes,
 		Difficulty:       input.Difficulty,
 		IsAvailable:      input.IsAvailable,
+		TasteTags:        input.TasteTags,
+		Proficiency:      input.Proficiency,
+		PriceRange:       input.PriceRange,
+		CookedCount:      input.CookedCount,
+		PrivateNote:      input.PrivateNote,
 		Ingredients:      buildIngredients(input.Ingredients, nil, now),
 		Steps:            buildSteps(input.Steps, nil, now),
 		CreatedAt:        now,
@@ -182,7 +188,7 @@ func (s *Store) UpdateRecipe(userID string, id string, input RecipeMutation) (Re
 	defer s.mu.Unlock()
 
 	input = normalizeRecipeMutation(input)
-	if input.Name == "" {
+	if !isRecipeMutationComplete(input) {
 		return Recipe{}, ErrInvalidInput
 	}
 
@@ -194,10 +200,16 @@ func (s *Store) UpdateRecipe(userID string, id string, input RecipeMutation) (Re
 		now := time.Now().UTC()
 		recipe.Name = input.Name
 		recipe.Description = input.Description
+		recipe.CookingMethod = input.CookingMethod
 		recipe.ServingCount = input.ServingCount
 		recipe.EstimatedMinutes = input.EstimatedMinutes
 		recipe.Difficulty = input.Difficulty
 		recipe.IsAvailable = input.IsAvailable
+		recipe.TasteTags = input.TasteTags
+		recipe.Proficiency = input.Proficiency
+		recipe.PriceRange = input.PriceRange
+		recipe.CookedCount = input.CookedCount
+		recipe.PrivateNote = input.PrivateNote
 		recipe.Ingredients = buildIngredients(input.Ingredients, recipe.Ingredients, now)
 		recipe.Steps = buildSteps(input.Steps, recipe.Steps, now)
 		recipe.UpdatedAt = now
@@ -293,10 +305,65 @@ func normalizeUsername(username string) string {
 func normalizeRecipeMutation(input RecipeMutation) RecipeMutation {
 	input.Name = strings.TrimSpace(input.Name)
 	input.Description = strings.TrimSpace(input.Description)
+	input.CookingMethod = strings.TrimSpace(input.CookingMethod)
 	input.ServingCount = clamp(input.ServingCount, 0, 99)
 	input.EstimatedMinutes = clamp(input.EstimatedMinutes, 0, 24*60)
 	input.Difficulty = clamp(input.Difficulty, 0, 5)
+	input.TasteTags = normalizeStringList(input.TasteTags, 8)
+	input.Proficiency = clamp(input.Proficiency, 0, 5)
+	input.PriceRange = strings.TrimSpace(input.PriceRange)
+	input.CookedCount = clamp(input.CookedCount, 0, 9999)
+	input.PrivateNote = strings.TrimSpace(input.PrivateNote)
 	return input
+}
+
+func isRecipeMutationComplete(input RecipeMutation) bool {
+	return input.Name != "" &&
+		input.CookingMethod != "" &&
+		input.Difficulty > 0 &&
+		input.Proficiency > 0 &&
+		len(input.TasteTags) > 0 &&
+		hasIngredientMutation(input.Ingredients) &&
+		hasStepMutation(input.Steps)
+}
+
+func hasIngredientMutation(items []IngredientMutation) bool {
+	for _, item := range items {
+		if strings.TrimSpace(item.Name) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasStepMutation(items []StepMutation) bool {
+	for _, item := range items {
+		if strings.TrimSpace(item.Title) != "" || strings.TrimSpace(item.Description) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeStringList(items []string, limit int) []string {
+	seen := map[string]bool{}
+	normalized := make([]string, 0, len(items))
+	for _, item := range items {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		normalized = append(normalized, value)
+		if limit > 0 && len(normalized) >= limit {
+			break
+		}
+	}
+	return normalized
 }
 
 func buildIngredients(input []IngredientMutation, existing []Ingredient, now time.Time) []Ingredient {

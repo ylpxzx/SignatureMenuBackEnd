@@ -32,8 +32,11 @@ type recipeSummaryResponse struct {
 	ID               string `json:"id"`
 	Name             string `json:"name"`
 	Description      string `json:"description"`
+	CookingMethod    string `json:"cooking_method"`
 	Difficulty       int    `json:"difficulty"`
+	Proficiency      int    `json:"proficiency"`
 	EstimatedMinutes int    `json:"estimated_minutes"`
+	CookedCount      int    `json:"cooked_count"`
 	IngredientCount  int    `json:"ingredient_count"`
 	StepCount        int    `json:"step_count"`
 	IsAvailable      bool   `json:"is_available"`
@@ -89,8 +92,11 @@ func summarizeRecipes(items []store.Recipe, limit int) []recipeSummaryResponse {
 			ID:               item.ID,
 			Name:             item.Name,
 			Description:      item.Description,
+			CookingMethod:    item.CookingMethod,
 			Difficulty:       item.Difficulty,
+			Proficiency:      item.Proficiency,
 			EstimatedMinutes: item.EstimatedMinutes,
+			CookedCount:      item.CookedCount,
 			IngredientCount:  len(item.Ingredients),
 			StepCount:        len(item.Steps),
 			IsAvailable:      item.IsAvailable,

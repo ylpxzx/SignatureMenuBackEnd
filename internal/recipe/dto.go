@@ -5,10 +5,16 @@ import "time"
 type recipeRequest struct {
 	Name             string              `json:"name"`
 	Description      string              `json:"description"`
+	CookingMethod    string              `json:"cooking_method"`
 	ServingCount     int                 `json:"serving_count"`
 	EstimatedMinutes int                 `json:"estimated_minutes"`
 	Difficulty       int                 `json:"difficulty"`
 	IsAvailable      *bool               `json:"is_available"`
+	TasteTags        []string            `json:"taste_tags"`
+	Proficiency      int                 `json:"proficiency"`
+	PriceRange       string              `json:"price_range"`
+	CookedCount      int                 `json:"cooked_count"`
+	PrivateNote      string              `json:"private_note"`
 	Ingredients      []ingredientRequest `json:"ingredients"`
 	Steps            []stepRequest       `json:"steps"`
 }
@@ -33,10 +39,16 @@ type recipeResponse struct {
 	ID               string               `json:"id"`
 	Name             string               `json:"name"`
 	Description      string               `json:"description"`
+	CookingMethod    string               `json:"cooking_method"`
 	ServingCount     int                  `json:"serving_count"`
 	EstimatedMinutes int                  `json:"estimated_minutes"`
 	Difficulty       int                  `json:"difficulty"`
 	IsAvailable      bool                 `json:"is_available"`
+	TasteTags        []string             `json:"taste_tags"`
+	Proficiency      int                  `json:"proficiency"`
+	PriceRange       string               `json:"price_range"`
+	CookedCount      int                  `json:"cooked_count"`
+	PrivateNote      string               `json:"private_note"`
 	Ingredients      []ingredientResponse `json:"ingredients"`
 	Steps            []stepResponse       `json:"steps"`
 	CreatedAt        time.Time            `json:"created_at"`

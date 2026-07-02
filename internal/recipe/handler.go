@@ -131,10 +131,16 @@ func toMutation(req recipeRequest) store.RecipeMutation {
 	return store.RecipeMutation{
 		Name:             req.Name,
 		Description:      req.Description,
+		CookingMethod:    req.CookingMethod,
 		ServingCount:     req.ServingCount,
 		EstimatedMinutes: req.EstimatedMinutes,
 		Difficulty:       req.Difficulty,
 		IsAvailable:      isAvailable,
+		TasteTags:        req.TasteTags,
+		Proficiency:      req.Proficiency,
+		PriceRange:       req.PriceRange,
+		CookedCount:      req.CookedCount,
+		PrivateNote:      req.PrivateNote,
 		Ingredients:      ingredients,
 		Steps:            steps,
 	}
@@ -171,10 +177,16 @@ func toRecipeResponse(item store.Recipe) recipeResponse {
 		ID:               item.ID,
 		Name:             item.Name,
 		Description:      item.Description,
+		CookingMethod:    item.CookingMethod,
 		ServingCount:     item.ServingCount,
 		EstimatedMinutes: item.EstimatedMinutes,
 		Difficulty:       item.Difficulty,
 		IsAvailable:      item.IsAvailable,
+		TasteTags:        item.TasteTags,
+		Proficiency:      item.Proficiency,
+		PriceRange:       item.PriceRange,
+		CookedCount:      item.CookedCount,
+		PrivateNote:      item.PrivateNote,
 		Ingredients:      ingredients,
 		Steps:            steps,
 		CreatedAt:        item.CreatedAt,
@@ -187,7 +199,7 @@ func handleStoreError(c *gin.Context, err error) {
 	case errors.Is(err, store.ErrNotFound):
 		httpx.Error(c, http.StatusNotFound, "not_found", "没有找到对应数据")
 	case errors.Is(err, store.ErrInvalidInput):
-		httpx.Error(c, http.StatusBadRequest, "invalid_input", "请至少填写菜谱名称")
+		httpx.Error(c, http.StatusBadRequest, "invalid_input", "请填写菜名、做法、食材清单、步骤、难度、熟练度和口味标签")
 	default:
 		httpx.Error(c, http.StatusInternalServerError, "internal_error", "服务暂时不可用")
 	}
